@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hand Tracking - Move Objects</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .draggable-object {
+            transition: transform 0.1s ease-out;
+            cursor: grab;
+        }
+        .draggable-object.grabbed {
+            cursor: grabbing;
+            transform: scale(1.15);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+        #video-container {
+            position: relative;
+            display: inline-block;
+        }
+        #hand-cursor {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            background: radial-gradient(circle, rgba(255, 0, 0, 0.8), rgba(255, 0, 0, 0.4));
+            border: 3px solid white;
+            border-radius: 50%;
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            display: none;
+            box-shadow: 0 0 20px rgba(255, 0, 0, 0.6);
+        }
+        .pulse {
+            animation: pulse 1s infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.2); }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-purple-50 min-h-screen p-8">
+    <div class="max-w-7xl mx-auto">
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-2">Hand Tracking Controller</h1>
+        <p class="text-center text-gray-600 mb-8">Move your hand to control objects on screen</p>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Camera Feed -->
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-800">Camera Feed</h2>
+                <div id="video-container" class="relative bg-black rounded-lg overflow-hidden">
+                    <img id="video-feed" src="/video_feed/" class="w-full h-auto">
+                    <div id="hand-cursor"></div>
+                </div>
+                <div class="mt-4 p-4 bg-gray-50 rounded-lg">
+                    <p class="text-sm text-gray-600">Status: <span id="status" class="font-semibold text-yellow-600">Starting...</span></p>
+                    <p class="text-sm text-gray-600 mt-1">Hand Position: <span id="coordinates" class="font-mono">Waiting...</span></p>
+                    <p class="text-sm text-gray-600 mt-1">FPS: <span id="fps" class="font-mono">0</span></p>
+                </div>
+                <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <h3 class="font-semibold text-gray-800 mb-2">💡 Tips for better detection:</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>• Use good lighting (not too bright, not too dark)</li>
+                        <li>• Keep a plain background behind your hand</li>
+                        <li>• Show your palm to the camera</li>
+                        <li>• Keep hand steady for 1-2 seconds initially</li>
+                        <li>• Try moving hand slowly at first</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <!-- Interactive Area -->
+            <div class="bg-white rounded-xl shadow-lg p-6">
+                <h2 class="text-2xl font-semibold mb-4 text-gray-800">Control Area</h2>
+                <div id="control-area" class="relative bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg h-96 overflow-hidden border-4 border-gray-300">
+                    <!-- Draggable Objects -->
+                    <div id="object1" class="draggable-object absolute w-20 h-20 bg-gradient-to-br from-red-400 to-red-600 rounded-lg shadow-lg flex items-center justify-center text-white font-bold" style="top: 50px; left: 50px;">
+                        🔴
+                    </div>
+                    <div id="object2" class="draggable-object absolute w-24 h-24 bg-gradient-to-br from-blue-400 to-blue-600 rounded-full shadow-lg flex items-center justify-center text-white font-bold text-2xl" style="top: 120px; left: 200px;">
+                        🔵
+                    </div>
+                    <div id="object3" class="draggable-object absolute w-28 h-16 bg-gradient-to-br from-green-400 to-green-600 rounded-lg shadow-lg flex items-center justify-center text-white font-bold" style="top: 180px; left: 100px;">
+                        🟢
+                    </div>
+                    <div id="object4" class="draggable-object absolute w-20 h-20 bg-gradient-to-br from-yellow-400 to-yellow-600 rounded-lg shadow-lg flex items-center justify-center text-white font-bold" style="top: 240px; left: 280px;">
+                        ⭐
+                    </div>
+                    <div id="object5" class="draggable-object absolute w-24 h-24 bg-gradient-to-br from-purple-400 to-purple-600 rounded-full shadow-lg flex items-center justify-center text-white font-bold text-2xl" style="top: 50px; left: 320px;">
+                        🟣
+                    </div>
+                </div>
+                <div class="mt-4 p-4 bg-green-50 rounded-lg border border-green-200">
+                    <h3 class="font-semibold text-gray-800 mb-2">📋 How to use:</h3>
+                    <ul class="text-sm text-gray-600 space-y-1">
+                        <li>• Show your hand to the camera</li>
+                        <li>• Move your hand to control the red cursor</li>
+                        <li>• Hover over objects to grab them (they'll grow)</li>
+                        <li>• Objects will follow your hand movement</li>
+                        <li>• Move away to release the object</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Settings Panel -->
+        <div class="mt-8 bg-white rounded-xl shadow-lg p-6">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-800">Settings</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Smoothing</label>
+                    <input type="range" id="smoothing" min="1" max="10" value="3" class="w-full">
+                    <p class="text-xs text-gray-500 mt-1">Current: <span id="smoothing-value">3</span></p>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Grab Distance (px)</label>
+                    <input type="range" id="grab-distance" min="30" max="120" value="60" class="w-full">
+                    <p class="text-xs text-gray-500 mt-1">Current: <span id="grab-distance-value">60</span>px</p>
+                </div>
+                <div class="flex items-end">
+                    <button id="reset-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition">
+                        🔄 Reset Objects
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let handPosition = { x: 0, y: 0, detected: false };
+        let previousPositions = [];
+        let grabbedObject = null;
+        let smoothing = 3;
+        let grabDistance = 60;
+        let lastFrameTime = Date.now();
+        let frameCount = 0;
+        
+        const controlArea = document.getElementById('control-area');
+        const handCursor = document.getElementById('hand-cursor');
+        const objects = document.querySelectorAll('.draggable-object');
+        const statusEl = document.getElementById('status');
+        const coordsEl = document.getElementById('coordinates');
+        const fpsEl = document.getElementById('fps');
+        
+        // Store initial positions for reset
+        const initialPositions = {};
+        objects.forEach(obj => {
+            const rect = obj.getBoundingClientRect();
+            const parentRect = controlArea.getBoundingClientRect();
+            initialPositions[obj.id] = {
+                left: parseInt(obj.style.left) || 50,
+                top: parseInt(obj.style.top) || 50
+            };
+        });
+        
+        // Fetch hand position from Django backend
+        async function updateHandPosition() {
+            try {
+                const response = await fetch('/get_hand_position/');
+                const data = await response.json();
+                
+                if (data.detected) {
+                    // Apply smoothing
+                    previousPositions.push({ x: data.x, y: data.y });
+                    if (previousPositions.length > smoothing) {
+                        previousPositions.shift();
+                    }
+                    
+                    // Calculate average position
+                    let avgX = 0, avgY = 0;
+                    previousPositions.forEach(pos => {
+                        avgX += pos.x;
+                        avgY += pos.y;
+                    });
+                    avgX /= previousPositions.length;
+                    avgY /= previousPositions.length;
+                    
+                    handPosition = { x: avgX, y: avgY, detected: true };
+                } else {
+                    handPosition.detected = false;
+                    previousPositions = [];
+                }
+                
+            } catch (error) {
+                console.error('Error fetching hand position:', error);
+                handPosition.detected = false;
+            }
+        }
+        
+        // Update object positions based on hand tracking
+        function updateObjects() {
+            // Calculate FPS
+            frameCount++;
+            const currentTime = Date.now();
+            if (currentTime - lastFrameTime >= 1000) {
+                fpsEl.textContent = frameCount;
+                frameCount = 0;
+                lastFrameTime = currentTime;
+            }
+            
+            if (!handPosition.detected) {
+                statusEl.textContent = 'No hand detected';
+                statusEl.className = 'font-semibold text-red-600';
+                handCursor.style.display = 'none';
+                
+                if (grabbedObject) {
+                    grabbedObject.classList.remove('grabbed');
+                    grabbedObject = null;
+                }
+                
+                requestAnimationFrame(updateObjects);
+                return;
+            }
+            
+            statusEl.textContent = '✓ Hand Detected';
+            statusEl.className = 'font-semibold text-green-600';
+            
+            const rect = controlArea.getBoundingClientRect();
+            const cursorX = handPosition.x * rect.width;
+            const cursorY = handPosition.y * rect.height;
+            
+            // Update cursor position
+            handCursor.style.display = 'block';
+            handCursor.style.left = cursorX + 'px';
+            handCursor.style.top = cursorY + 'px';
+            
+            // Update coordinates display
+            coordsEl.textContent = `X: ${Math.round(cursorX)}, Y: ${Math.round(cursorY)}`;
+            
+            // Check for object grabbing
+            let foundObject = false;
+            let closestObject = null;
+            let minDistance = Infinity;
+            
+            objects.forEach(obj => {
+                const objRect = obj.getBoundingClientRect();
+                const objCenterX = objRect.left + objRect.width / 2 - rect.left;
+                const objCenterY = objRect.top + objRect.height / 2 - rect.top;
+                
+                const distance = Math.sqrt(
+                    Math.pow(cursorX - objCenterX, 2) + 
+                    Math.pow(cursorY - objCenterY, 2)
+                );
+                
+                if (distance < grabDistance && distance < minDistance) {
+                    minDistance = distance;
+                    closestObject = obj;
+                    foundObject = true;
+                }
+            });
+            
+            // Update grabbed object
+            if (foundObject && closestObject) {
+                if (grabbedObject !== closestObject) {
+                    if (grabbedObject) {
+                        grabbedObject.classList.remove('grabbed');
+                    }
+                    grabbedObject = closestObject;
+                    grabbedObject.classList.add('grabbed');
+                    handCursor.classList.add('pulse');
+                }
+            } else if (!foundObject && grabbedObject) {
+                grabbedObject.classList.remove('grabbed');
+                grabbedObject = null;
+                handCursor.classList.remove('pulse');
+            }
+            
+            // Move grabbed object
+            if (grabbedObject) {
+                const objRect = grabbedObject.getBoundingClientRect();
+                const newLeft = cursorX - (objRect.width / 2);
+                const newTop = cursorY - (objRect.height / 2);
+                
+                const boundedLeft = Math.max(0, Math.min(rect.width - objRect.width, newLeft));
+                const boundedTop = Math.max(0, Math.min(rect.height - objRect.height, newTop));
+                
+                grabbedObject.style.left = boundedLeft + 'px';
+                grabbedObject.style.top = boundedTop + 'px';
+            }
+            
+            requestAnimationFrame(updateObjects);
+        }
+        
+        // Settings handlers
+        document.getElementById('smoothing').addEventListener('input', (e) => {
+            smoothing = parseInt(e.target.value);
+            document.getElementById('smoothing-value').textContent = smoothing;
+            previousPositions = [];
+        });
+        
+        document.getElementById('grab-distance').addEventListener('input', (e) => {
+            grabDistance = parseInt(e.target.value);
+            document.getElementById('grab-distance-value').textContent = grabDistance;
+        });
+        
+        document.getElementById('reset-btn').addEventListener('click', () => {
+            objects.forEach(obj => {
+                obj.style.left = initialPositions[obj.id].left + 'px';
+                obj.style.top = initialPositions[obj.id].top + 'px';
+                obj.classList.remove('grabbed');
+            });
+            grabbedObject = null;
+        });
+        
+        // Start tracking
+        updateObjects();
+        
+        // Poll hand position from server every 30ms (~33 FPS)
+        setInterval(updateHandPosition, 30);
+    </script>
+</body>
+</html>
